@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paper.io 2 Clone</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: white;
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #ui {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 100;
+    }
+
+    #score {
+      font-size: 24px;
+      font-weight: bold;
+      color: #4ECDC4;
+    }
+
+    #status {
+      margin-top: 5px;
+      color: #aaa;
+      font-size: 12px;
+    }
+
+    #instructions {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 12px;
+      text-align: center;
+      z-index: 100;
+    }
+
+    /* Leaderboard */
+    #leaderboard {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      z-index: 100;
+      min-width: 220px;
+    }
+
+    #leaderboard h3 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      color: #fff;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .leaderboard-entry {
+      display: flex;
+      align-items: center;
+      margin: 6px 0;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+    }
+
+    .leaderboard-rank {
+      font-weight: bold;
+      margin-right: 10px;
+      min-width: 25px;
+      color: #ffd700;
+    }
+
+    .leaderboard-name {
+      flex: 1;
+      color: #fff;
+      font-size: 13px;
+    }
+
+    .leaderboard-percent {
+      color: #4ECDC4;
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    /* Percentage display */
+    #score {
+      font-size: 28px;
+      font-weight: bold;
+      color: #4ECDC4;
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background: rgba(26, 26, 46, 0.95);
+      border: 2px solid #4ECDC4;
+      border-radius: 16px;
+      padding: 40px;
+      text-align: center;
+      min-width: 400px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-banner {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 15px 30px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+      border: 2px dashed rgba(255, 255, 255, 0.5);
+    }
+
+    .modal-title {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      color: #4ECDC4;
+    }
+
+    .modal-input {
+      width: 100%;
+      padding: 15px;
+      font-size: 18px;
+      border: 2px solid #4ECDC4;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      text-align: center;
+      margin-bottom: 20px;
+      outline: none;
+      transition: all 0.3s;
+    }
+
+    .modal-input:focus {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #45B7D1;
+      box-shadow: 0 0 20px rgba(69, 183, 209, 0.3);
+    }
+
+    .modal-input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .modal-button {
+      background: linear-gradient(135deg, #4ECDC4 0%, #45B7D1 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .modal-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 20px rgba(78, 205, 196, 0.4);
+    }
+
+    .modal-button:active {
+      transform: scale(0.98);
+    }
+
+    .modal-stats {
+      margin: 20px 0;
+      font-size: 24px;
+    }
+
+    .modal-stats .stat-label {
+      color: #aaa;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    .modal-stats .stat-value {
+      color: #4ECDC4;
+      font-size: 32px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <!-- Intro Modal -->
+  <div id="intro-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-banner">📢 Advertisement Place for Rent</div>
+      <div class="modal-title">Paper.io 2</div>
+      <input
+        type="text"
+        id="username-input"
+        class="modal-input"
+        placeholder="Enter your username..."
+        maxlength="15"
+        autocomplete="off"
+      />
+      <button id="play-button" class="modal-button">Play Game</button>
+    </div>
+  </div>
+
+  <!-- Outro Modal -->
+  <div id="outro-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-title">Game Over!</div>
+      <div class="modal-stats">
+        <div class="stat-label">Your Score</div>
+        <div class="stat-value" id="final-score">0.0%</div>
+      </div>
+      <button id="play-again-button" class="modal-button">Play Again</button>
+    </div>
+  </div>
+
+  <div id="ui">
+    <div id="score">0.0%</div>
+    <div id="status">Connecting...</div>
+  </div>
+
+  <div id="leaderboard">
+    <h3>LEADERBOARD</h3>
+    <div id="leaderboard-list"></div>
+  </div>
+
+  <div id="instructions">
+    Move mouse to steer • Leave territory to capture area • Don't hit trails!
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
