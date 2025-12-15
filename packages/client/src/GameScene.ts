@@ -87,7 +87,13 @@ export class GameScene {
     window.addEventListener('resize', () => this.onResize());
 
     // Initialize Colyseus client (but don't connect yet - wait for username)
-    this.client = new Client('ws://localhost:2567');
+    // Use wss:// in production, ws:// in development
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host || 'localhost:2567';
+    const serverUrl = `${protocol}//${host}`;
+
+    console.log('🔗 Connecting to server:', serverUrl);
+    this.client = new Client(serverUrl);
   }
 
   /**
