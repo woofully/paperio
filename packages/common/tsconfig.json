@@ -1,11 +1,16 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
     "composite": true,
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "ESNext"
+    "skipLibCheck": true
   },
   "include": ["src/**/*"]
 }

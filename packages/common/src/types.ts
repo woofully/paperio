@@ -23,7 +23,10 @@ export interface Player {
 
   // Game state
   isDead: boolean;
+  deathTimer: number; // Time since death (for delayed removal)
   score: number;
+  invulnerableTimer: number; // Grace period after capture to prevent instant death
+  hasWon: boolean; // Player captured 99%+ of world
 }
 
 export interface BoundaryIntersection {

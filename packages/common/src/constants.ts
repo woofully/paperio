@@ -12,7 +12,7 @@ export const PLAYER_TURN_SPEED = 12.0; // lerp factor for smooth turning (very r
 export const PLAYER_SIZE = 10; // visual size
 
 // Territory settings
-export const STARTING_TERRITORY_SIZE = 200; // Much bigger so it's visible!
+export const STARTING_TERRITORY_SIZE = 300; // Increased for safer spawn
 export const MIN_SPAWN_DISTANCE = 500; // min distance from other territories
 
 // Trail settings

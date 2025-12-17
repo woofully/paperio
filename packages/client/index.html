@@ -226,6 +226,20 @@
       font-size: 32px;
       font-weight: bold;
     }
+
+    /* Minimap */
+    #minimap {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.8);
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -267,6 +281,8 @@
     <h3>LEADERBOARD</h3>
     <div id="leaderboard-list"></div>
   </div>
+
+  <canvas id="minimap" width="200" height="200"></canvas>
 
   <div id="instructions">
     Move mouse to steer • Leave territory to capture area • Don't hit trails!

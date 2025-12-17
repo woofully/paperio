@@ -97,17 +97,36 @@ export function extractBoundaryArc(
 }
 
 /**
- * Calculate polygon area using shoelace formula
- * Returns absolute area (always positive)
+ * Calculate signed polygon area using shoelace formula
+ * Positive = Clockwise (in screen coords where Y is down)
+ * Negative = Counter-Clockwise
  */
-export function getPolygonArea(polygon: Point[]): number {
+export function getSignedPolygonArea(polygon: Point[]): number {
   let area = 0;
   for (let i = 0; i < polygon.length; i++) {
     const j = (i + 1) % polygon.length;
     area += polygon[i].x * polygon[j].y;
     area -= polygon[j].x * polygon[i].y;
   }
-  return Math.abs(area) / 2;
+  return area / 2;
+}
+
+/**
+ * Calculate polygon area (absolute value)
+ * Returns absolute area (always positive)
+ */
+export function getPolygonArea(polygon: Point[]): number {
+  return Math.abs(getSignedPolygonArea(polygon));
+}
+
+/**
+ * Ensure polygon has clockwise winding order
+ */
+export function ensureClockwise(polygon: Point[]): Point[] {
+  if (getSignedPolygonArea(polygon) < 0) {
+    return [...polygon].reverse();
+  }
+  return polygon;
 }
 
 /**
@@ -181,12 +200,15 @@ export function computeCapture(
   console.log(`   Candidate A: ${areaA.toFixed(0)} area (${diffA > 0 ? '+' : ''}${diffA.toFixed(0)} change)`);
   console.log(`   Candidate B: ${areaB.toFixed(0)} area (${diffB > 0 ? '+' : ''}${diffB.toFixed(0)} change)`);
 
-  // Now that winding order is fixed, we can trust area calculations
-  // Choose the candidate with LARGER AREA (expansion, not reduction)
-  console.log(`   ✅ Returning ${areaA > areaB ? 'A' : 'B'} (larger area = expansion)`);
+  // Choose the candidate with LARGER ABSOLUTE AREA (expansion, not reduction)
+  // Using Math.abs ensures we pick the correct polygon regardless of winding order
+  const absAreaA = Math.abs(areaA);
+  const absAreaB = Math.abs(areaB);
+
+  console.log(`   ✅ Returning ${absAreaA > absAreaB ? 'A' : 'B'} (larger area = expansion)`);
 
   // Return the larger polygon (Expansion)
-  return areaA > areaB ? candidateA : candidateB;
+  return absAreaA > absAreaB ? candidateA : candidateB;
 }
 
 /**

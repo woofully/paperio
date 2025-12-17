@@ -10,6 +10,8 @@ import {
   PLAYER_TURN_SPEED,
   TRAIL_POINT_DISTANCE,
   STARTING_TERRITORY_SIZE,
+  WORLD_WIDTH,
+  WORLD_HEIGHT,
 } from './constants.js';
 
 /**
@@ -23,9 +25,9 @@ export class GameState {
    * Create a new player with starting territory
    */
   createPlayer(id: string, x: number, y: number, color: string): Player {
-    // Create a small circle as starting territory (like real Paper.io 2)
-    const radius = STARTING_TERRITORY_SIZE / 2;
-    const segments = 64; // High segment count for smooth circle appearance
+    // Generate territory slightly larger (+5) to ensure spawn point is mathematically inside
+    const radius = (STARTING_TERRITORY_SIZE / 2) + 5;
+    const segments = 32;
     const territory: Point[] = [];
 
     for (let i = 0; i < segments; i++) {
@@ -45,7 +47,7 @@ export class GameState {
       y,
       angle: 0,
       targetAngle: 0,
-      speed: PLAYER_SPEED,
+      speed: 0, // Start stationary - activate on first input
       color,
       territory,
       trail: [],
@@ -53,7 +55,10 @@ export class GameState {
       exitPoint: null,
       exitEdgeIndex: -1,
       isDead: false,
+      deathTimer: 0, // Time since death
       score: initialArea,
+      invulnerableTimer: 0, // No grace period at spawn
+      hasWon: false, // Not a winner yet
     };
 
     this.players.set(id, player);
@@ -73,7 +78,16 @@ export class GameState {
    */
   update(dt: number): void {
     for (const player of this.players.values()) {
-      if (player.isDead) continue;
+      if (player.isDead) {
+        // Increment death timer for delayed removal
+        player.deathTimer += dt;
+        continue;
+      }
+
+      // Decrease invulnerability timer
+      if (player.invulnerableTimer > 0) {
+        player.invulnerableTimer -= dt;
+      }
 
       this.updatePlayerMovement(player, dt);
       this.updatePlayerTrail(player);
@@ -105,6 +119,23 @@ export class GameState {
 
     player.x += Math.cos(player.angle) * player.speed * dt;
     player.y += Math.sin(player.angle) * player.speed * dt;
+
+    // Enforce circular boundary (center at WORLD_WIDTH/2, WORLD_HEIGHT/2, radius WORLD_WIDTH/2)
+    const centerX = WORLD_WIDTH / 2;
+    const centerY = WORLD_HEIGHT / 2;
+    // Reduce maxRadius by 1.0 to prevent floating-point precision issues at exact boundary
+    const maxRadius = (WORLD_WIDTH / 2) - 1.0;
+
+    const dx = player.x - centerX;
+    const dy = player.y - centerY;
+    const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+
+    if (distFromCenter > maxRadius) {
+      // Player is outside the circle - clamp to boundary
+      const angle = Math.atan2(dy, dx);
+      player.x = centerX + Math.cos(angle) * maxRadius;
+      player.y = centerY + Math.sin(angle) * maxRadius;
+    }
 
     // Store previous position for intersection detection
     (player as any).prevX = prevX;
@@ -147,6 +178,11 @@ export class GameState {
     const player = this.players.get(playerId);
     if (player && !player.isDead) {
       player.targetAngle = targetAngle;
+
+      // Activate player speed on first input
+      if (player.speed === 0) {
+        player.speed = PLAYER_SPEED;
+      }
     }
   }
 

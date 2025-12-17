@@ -28,12 +28,28 @@ export class GameScene {
   private outroModal: HTMLElement;
   private username: string = '';
   private currentScore: string = '0.0%';
+  private outroModalShown: boolean = false;
+
+  // Minimap
+  private minimapCanvas: HTMLCanvasElement;
+  private minimapCtx: CanvasRenderingContext2D;
+  private readonly MINIMAP_SIZE = 200;
 
   constructor() {
     // Initialize Three.js
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe8f4f8); // Light blueish-white
+    this.scene.background = new THREE.Color(0x87CEEB); // Sky blue for outside world
     this.clock = new THREE.Clock(); // Start the clock for delta time
+
+    // Create circular playable area background (radius 2500, centered at world)
+    const playableAreaGeometry = new THREE.CircleGeometry(WORLD_WIDTH / 2, 64); // Radius 2500, 64 segments for smooth circle
+    const playableAreaMaterial = new THREE.MeshBasicMaterial({
+      color: 0xe8f4f8, // Light blueish-white
+      side: THREE.DoubleSide,
+    });
+    const playableArea = new THREE.Mesh(playableAreaGeometry, playableAreaMaterial);
+    playableArea.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, -10); // Center at (2500, 2500), behind everything
+    this.scene.add(playableArea);
 
     // Set up orthographic camera for top-down view
     const aspect = window.innerWidth / window.innerHeight;
@@ -65,7 +81,7 @@ export class GameScene {
     this.labelRenderer.domElement.style.top = '0';
     this.labelRenderer.domElement.style.left = '0';
     this.labelRenderer.domElement.style.pointerEvents = 'none';
-    document.body.insertBefore(this.labelRenderer.domElement, document.body.firstChild.nextSibling);
+    document.body.appendChild(this.labelRenderer.domElement);
 
     // Add grid for reference
     this.addGrid();
@@ -87,13 +103,25 @@ export class GameScene {
     window.addEventListener('resize', () => this.onResize());
 
     // Initialize Colyseus client (but don't connect yet - wait for username)
-    // Use wss:// in production, ws:// in development
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host || 'localhost:2567';
-    const serverUrl = `${protocol}//${host}`;
+    // In development: always use ws://localhost:2567
+    // In production: use current host with wss://
+    let serverUrl: string;
+
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development - connect to game server on port 2567
+      serverUrl = 'ws://localhost:2567';
+    } else {
+      // Production - use current host (server serves both client and game)
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      serverUrl = `${protocol}//${window.location.host}`;
+    }
 
     console.log('🔗 Connecting to server:', serverUrl);
     this.client = new Client(serverUrl);
+
+    // Initialize minimap canvas
+    this.minimapCanvas = document.getElementById('minimap') as HTMLCanvasElement;
+    this.minimapCtx = this.minimapCanvas.getContext('2d')!;
   }
 
   /**
@@ -107,11 +135,8 @@ export class GameScene {
     // Handle Play button
     const handlePlay = () => {
       const username = usernameInput.value.trim();
-      if (username.length === 0) {
-        alert('Please enter a username!');
-        return;
-      }
-      this.username = username;
+      // Use "player" as default if username is empty
+      this.username = username.length === 0 ? 'player' : username;
       this.introModal.classList.add('hidden');
       this.connect();
     };
@@ -139,6 +164,7 @@ export class GameScene {
       // Reset score display
       this.scoreEl.textContent = '0.0%';
       this.currentScore = '0.0%';
+      this.outroModalShown = false; // Allow modal to show again
 
       // Reconnect with same username
       this.connect();
@@ -151,8 +177,18 @@ export class GameScene {
   /**
    * Show outro modal with final score
    */
-  private showOutroModal(): void {
+  private showOutroModal(isVictory: boolean = false): void {
+    const modalTitleEl = this.outroModal.querySelector('.modal-title')!;
     const finalScoreEl = document.getElementById('final-score')!;
+
+    if (isVictory) {
+      modalTitleEl.textContent = '🏆 VICTORY! 🏆';
+      (modalTitleEl as HTMLElement).style.color = '#ffd700'; // Gold color
+    } else {
+      modalTitleEl.textContent = 'Game Over!';
+      (modalTitleEl as HTMLElement).style.color = '#4ECDC4'; // Default cyan
+    }
+
     finalScoreEl.textContent = this.currentScore;
     this.outroModal.classList.remove('hidden');
   }
@@ -259,13 +295,20 @@ export class GameScene {
   /**
    * Player removed from game
    */
-  private onPlayerRemoved(sessionId: string): void {
+  private onPlayerRemoved(sessionId: string, player: any): void {
     console.log('Player removed:', sessionId);
 
     const renderer = this.playerRenderers.get(sessionId);
     if (renderer) {
-      renderer.dispose();
-      this.playerRenderers.delete(sessionId);
+      // Trigger explosion if player hasn't already exploded
+      // This handles cases where the server removes the player before isDead state is synced
+      renderer.setVisible(false, player.x || renderer.characterMesh.position.x, player.y || renderer.characterMesh.position.y);
+
+      // Small delay before disposal to let explosion animation start
+      setTimeout(() => {
+        renderer.dispose();
+        this.playerRenderers.delete(sessionId);
+      }, 100); // 100ms delay for explosion to spawn particles
     }
   }
 
@@ -291,15 +334,18 @@ export class GameScene {
 
     // Update score for local player
     if (sessionId === this.myPlayerId) {
-      // Calculate percentage (assuming world is 5000x5000 = 25M total area)
-      const totalArea = 5000 * 5000;
+      // Calculate percentage based on circular playable world
+      // Radius = (5000/2) - 1 = 2499, Area = π × 2499²
+      const worldRadius = 2499;
+      const totalArea = Math.PI * worldRadius * worldRadius;
       const percentage = ((player.score / totalArea) * 100).toFixed(2);
       this.scoreEl.textContent = `${percentage}%`;
       this.currentScore = `${percentage}%`;
 
-      // Show outro modal if player just died
-      if (player.isDead) {
-        this.showOutroModal();
+      // Show outro modal if player just died or won (only once)
+      if ((player.isDead || player.hasWon) && !this.outroModalShown) {
+        this.outroModalShown = true;
+        this.showOutroModal(player.hasWon);
       }
     }
 
@@ -318,8 +364,9 @@ export class GameScene {
       .sort((a, b) => b.score - a.score)
       .slice(0, 10); // Top 10
 
-    // Calculate total area for percentages
-    const totalArea = 5000 * 5000;
+    // Calculate total area for percentages (circular world)
+    const worldRadius = 2499;
+    const totalArea = Math.PI * worldRadius * worldRadius;
 
     // Build leaderboard HTML
     this.leaderboardEl.innerHTML = players
@@ -392,6 +439,88 @@ export class GameScene {
   }
 
   /**
+   * Update minimap display
+   */
+  private updateMinimap(): void {
+    if (!this.myPlayerId || !this.room) return;
+
+    const player = this.room.state.players.get(this.myPlayerId);
+    if (!player) return;
+
+    const ctx = this.minimapCtx;
+    const size = this.MINIMAP_SIZE;
+    const center = size / 2;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, size, size);
+
+    // Clip to circular boundary
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center, center, center, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Draw background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 0, size, size);
+
+    // Draw player territory (if exists)
+    if (player.territory && player.territory.length > 0) {
+      // Convert Colyseus ArraySchema to real array (same as PlayerRenderer)
+      const territoryData = Array.isArray(player.territory) ? player.territory : Array.from(player.territory);
+
+      const points: { x: number; y: number }[] = [];
+
+      // Detect data format (flat array vs object array) - same logic as PlayerRenderer
+      if (territoryData.length > 0 && typeof territoryData[0] === 'number') {
+        // FORMAT: Flat array [x, y, x, y...]
+        for (let i = 0; i < territoryData.length; i += 2) {
+          points.push({ x: territoryData[i], y: territoryData[i + 1] });
+        }
+      } else {
+        // FORMAT: Object array [{x,y}, {x,y}...]
+        for (let i = 0; i < territoryData.length; i++) {
+          points.push(territoryData[i]);
+        }
+      }
+
+      if (points.length >= 3) {
+        ctx.fillStyle = player.color;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+
+        points.forEach((point, i) => {
+          const x = (point.x / WORLD_WIDTH) * size;
+          const y = ((WORLD_HEIGHT - point.y) / WORLD_HEIGHT) * size; // Invert Y
+
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      }
+    }
+
+    // Draw player position dot
+    const playerX = (player.x / WORLD_WIDTH) * size;
+    const playerY = ((WORLD_HEIGHT - player.y) / WORLD_HEIGHT) * size; // Invert Y
+
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(playerX, playerY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Add glow effect
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  /**
    * Main render loop
    */
   animate = (): void => {
@@ -417,6 +546,9 @@ export class GameScene {
 
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
+
+    // Update minimap
+    this.updateMinimap();
   };
 
   /**

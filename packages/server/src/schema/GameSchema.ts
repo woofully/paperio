@@ -12,6 +12,7 @@ export class PlayerState extends Schema {
   @type('number') angle: number = 0;
   @type('string') color: string = '#FFFFFF';
   @type('boolean') isDead: boolean = false;
+  @type('boolean') hasWon: boolean = false;
   @type('number') score: number = 0;
 
   // Territory as flat array: [x1, y1, x2, y2, ...]

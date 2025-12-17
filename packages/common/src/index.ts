@@ -8,6 +8,8 @@ export {
   findBoundaryIntersection,
   extractBoundaryArc,
   getPolygonArea,
+  getSignedPolygonArea,
+  ensureClockwise,
   computeCapture,
   simplifyPolygon,
   segmentsIntersect,

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { Point } from '@paperio2/common';
+import { WORLD_WIDTH, WORLD_HEIGHT } from '@paperio2/common';
 import { TrailRenderer } from './TrailRenderer.js';
 
 /**
@@ -72,6 +73,7 @@ export class PlayerRenderer {
   // INTERPOLATION VARIABLES
   private targetPosition = new THREE.Vector3();
   private currentTrailData: Point[] = [];
+  private isFirstPositionUpdate = true; // Track first update to prevent fly-in
 
   constructor(scene: THREE.Scene, color: string, playerName: string) {
     this.scene = scene;
@@ -84,9 +86,16 @@ export class PlayerRenderer {
       opacity: 0.9,  // Almost opaque!
       transparent: true,
       side: THREE.DoubleSide,
+      depthTest: false, // Disable depth test to prevent z-fighting
+      depthWrite: false, // Don't write to depth buffer
     });
     this.territoryMesh = new THREE.Mesh(territoryGeometry, territoryMaterial);
-    this.territoryMesh.position.z = 0.5;
+
+    // FIX: Lock Z-index and Rendering Order
+    this.territoryMesh.position.z = 1;
+    this.territoryMesh.renderOrder = 1; // Force draw order
+    this.territoryMesh.frustumCulled = false; // Prevent flickering when updating
+
     scene.add(this.territoryMesh);
     console.log('Created territory mesh with color:', color);
 
@@ -95,8 +104,14 @@ export class PlayerRenderer {
     const characterMaterial = new THREE.MeshBasicMaterial({
       color: new THREE.Color(color),
       opacity: 1.0,
+      depthTest: false,
     });
     this.characterMesh = new THREE.Mesh(characterGeometry, characterMaterial);
+
+    // FIX: Lock Character Z and Order
+    this.characterMesh.position.z = 10;
+    this.characterMesh.renderOrder = 10; // Draw on top of territory
+
     scene.add(this.characterMesh);
     console.log('Created character with radius 25, color:', color);
 
@@ -123,9 +138,16 @@ export class PlayerRenderer {
   /**
    * Called when server sends new data.
    * We DO NOT move the mesh here. We just update the target.
+   * Exception: On first update, set position directly to prevent fly-in effect.
    */
   updatePosition(x: number, y: number): void {
     this.targetPosition.set(x, y, 10);
+
+    // On first position update, snap to position immediately (no interpolation)
+    if (this.isFirstPositionUpdate) {
+      this.characterMesh.position.copy(this.targetPosition);
+      this.isFirstPositionUpdate = false;
+    }
   }
 
   /**
@@ -136,8 +158,26 @@ export class PlayerRenderer {
     if (this.isDead) return;
 
     // 1. Smoothly Interpolate Player
-    const smoothingSpeed = 15.0;
+    // Lower smoothing speed to reduce jitter at boundaries
+    const smoothingSpeed = 8.0;
     this.characterMesh.position.lerp(this.targetPosition, smoothingSpeed * dt);
+
+    // 1.5. Enforce circular boundary on client side (prevent visual glitches)
+    const centerX = WORLD_WIDTH / 2;
+    const centerY = WORLD_HEIGHT / 2;
+    // Reduce maxRadius by 1.0 to prevent floating-point precision issues at exact boundary
+    const maxRadius = (WORLD_WIDTH / 2) - 1.0;
+
+    const dx = this.characterMesh.position.x - centerX;
+    const dy = this.characterMesh.position.y - centerY;
+    const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+
+    if (distFromCenter > maxRadius) {
+      // Clamp to boundary
+      const angle = Math.atan2(dy, dx);
+      this.characterMesh.position.x = centerX + Math.cos(angle) * maxRadius;
+      this.characterMesh.position.y = centerY + Math.sin(angle) * maxRadius;
+    }
 
     // 2. Render Trail with Robust Pruning
     if (this.currentTrailData.length > 0) {
@@ -156,7 +196,7 @@ export class PlayerRenderer {
       let foundSegment = false;
       const searchLimit = Math.min(displayTrail.length - 1, 10);
 
-      for (let i = displayTrail.length - 1; i > displayTrail.length - 1 - searchLimit; i--) {
+      for (let i = displayTrail.length - 1; i > displayTrail.length - 1 - searchLimit && i > 0; i--) {
         const pEnd = displayTrail[i];
         const pStart = displayTrail[i - 1];
 
@@ -249,16 +289,26 @@ export class PlayerRenderer {
 
     // Create shape
     const shape = new THREE.Shape();
-    shape.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) {
-      shape.lineTo(points[i].x, points[i].y);
+    if (points.length > 0) {
+      shape.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        shape.lineTo(points[i].x, points[i].y);
+      }
+      shape.closePath();
     }
-    shape.closePath();
 
-    // Update geometry
     const geometry = new THREE.ShapeGeometry(shape);
-    this.territoryMesh.geometry.dispose();
+
+    // FIX: Swap geometry atomically
+    const oldGeo = this.territoryMesh.geometry;
     this.territoryMesh.geometry = geometry;
+
+    // Ensure rendering stability settings are maintained
+    this.territoryMesh.frustumCulled = false;
+    this.territoryMesh.renderOrder = 1;
+
+    // Dispose OLD geometry after swap to prevent flickering
+    oldGeo.dispose();
 
     // FORCE visibility
     this.territoryMesh.visible = true;
