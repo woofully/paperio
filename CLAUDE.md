@@ -69,12 +69,14 @@ The server runs the authoritative `GameState` simulation and syncs changes to `G
 - Detects territory entry/exit using `findBoundaryIntersection()`
 - Computes new territory with `computeCapture()` using polygon boolean operations
 - Syncs to `GameRoomState` only when values change
+- AI bots update at 6Hz (throttled for CPU efficiency) via `BotBrain` class
 
 **Client (60fps variable)**:
 - Receives server updates via Colyseus state sync
 - Uses delta-time interpolation (`THREE.Clock.getDelta()`) to smooth movement between updates
 - Camera locks to interpolated player position, not raw server data
 - Trail rendering uses vector projection to prevent visual artifacts from client lag
+- Minimap renders all players and territories in real-time (200x200px canvas)
 
 ### Territory Capture Algorithm
 
@@ -157,10 +159,15 @@ WORLD_WIDTH = 5000
 WORLD_HEIGHT = 5000
 PLAYER_SPEED = 500  // units/second
 SERVER_TICK_RATE = 60  // Hz
-STARTING_TERRITORY_SIZE = 200  // diameter of spawn circle
+STARTING_TERRITORY_SIZE = 300  // diameter of spawn circle (increased for safer spawn)
+MIN_SPAWN_DISTANCE = 500  // minimum distance from other territories
+TRAIL_WIDTH = 20  // visual width of trail
+PLAYER_TURN_SPEED = 12.0  // lerp factor for smooth turning
 ```
 
 Changing these affects game balance. Speed and tick rate must stay in sync for smooth interpolation.
+
+**World Geometry**: The playable area is a **circular** region with radius 2500, centered at (2500, 2500). Players must stay within this boundary or die.
 
 ## Network Protocol
 
@@ -179,10 +186,16 @@ room.send('input', { type: 'input', angle: Math.atan2(-dy, dx) });
 
 ### Production vs Development
 
-- Development: Client connects to `ws://localhost:2567`
-- Production: Client auto-detects protocol/host from `window.location`
+**Development**:
+- Client connects to `ws://localhost:2567`
+- Client runs on Vite dev server (port 3000) with HMR
+- Server runs with `tsx watch` for auto-reload
 
-Server serves static client files in production (see `packages/server/src/index.ts`).
+**Production**:
+- Client auto-detects WebSocket protocol/host from `window.location`
+- Server serves static client files from `packages/client/dist` using Express
+- Single deployment runs both game server and web server on port 8080
+- WebSocket upgrades handled automatically by Colyseus
 
 ### Username System
 
@@ -193,9 +206,15 @@ room = await client.joinOrCreate('game', { username: this.username });
 
 Usernames appear in leaderboard and as CSS2D labels below players (using Three.js `CSS2DRenderer`).
 
-### Player Limit
+### Player Limit & AI Bots
 
 Rooms limited to 10 players (`maxClients = 10` in `GameRoom.onCreate`). This prevents performance issues from excessive collision checks.
+
+The server maintains a minimum player count using AI bots (`BotBrain` class):
+- Target: 4 total players (humans + bots)
+- Bots only spawn when < 3 human players are present
+- Bot AI runs at 6Hz (throttled from server's 60Hz for efficiency)
+- Bots have realistic behavior: wandering, avoiding boundaries, returning to safety when trails get long
 
 ## Common Pitfalls
 
@@ -205,11 +224,44 @@ Rooms limited to 10 players (`maxClients = 10` in `GameRoom.onCreate`). This pre
 4. **Client interpolation** - Never render server position directly, always interpolate
 5. **Spatial hash indexing** - Always include segment index when inserting trails
 6. **Build order** - Must build `common` before `server` or `client`
+7. **Circular world boundary** - The world is circular (not rectangular), bots and collision detection account for this
+8. **Bot management** - Bots are automatically spawned/removed by the server; don't create them manually
+
+## Debugging & Development Tips
+
+### Logging
+
+The codebase uses extensive console logging for debugging:
+- Server logs appear in the terminal running `npm run dev:server`
+- Client logs appear in browser console
+- Key events logged: player joins, captures, collisions, bot spawns
+
+### Testing Territory Capture
+
+To test the capture algorithm:
+1. Start both dev servers
+2. Open multiple browser tabs to test multiplayer
+3. Watch server logs for `computeCapture` output showing area calculations
+4. Territory capture logs include: exit/entry points, trail length, candidate areas
+
+### Port Management
+
+If you get `EADDRINUSE` errors:
+- See `PORT_MANAGEMENT.md` for detailed port management commands
+- Quick fix: `lsof -ti :3000 | xargs kill -9` and `lsof -ti :2567 | xargs kill -9`
+
+### Common Development Workflow
+
+```bash
+# Terminal 1: Start server with auto-reload
+npm run dev:server
+
+# Terminal 2: Start client with HMR
+npm run dev:client
+
+# Test multiplayer: Open http://localhost:3000 in multiple tabs
+```
 
 ## Deployment
 
-See `DEPLOY.md` for Fly.io deployment instructions. The app uses Docker multi-stage build with production-only dependencies.
-
-## Port Management
-
-See `PORT_MANAGEMENT.md` for commands to check and kill processes on development ports (3000, 2567).
+See `DEPLOY.md` for comprehensive Fly.io deployment instructions. The app uses Docker multi-stage build with production-only dependencies.
