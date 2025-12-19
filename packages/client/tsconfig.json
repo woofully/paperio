@@ -1,16 +1,15 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "target": "ES2020",
     "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
     "paths": {
       "@paperio2/common": ["../common/src/index.ts"]
     }
   },
-  "references": [
-    { "path": "../common" }
-  ],
   "include": ["src/**/*"]
 }

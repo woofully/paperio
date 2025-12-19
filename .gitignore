@@ -82,3 +82,9 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+
+fly.toml
+DEPLOY.md
+Dockerfile
+PORT_MANAGEMENT.md
+
