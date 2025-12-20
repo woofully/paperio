@@ -75,18 +75,21 @@ Docker provides the same deployment environment as Fly.io and ensures consistenc
 
 ### 2.1 Install Docker
 
+**IMPORTANT FOR CHINA**: Use Aliyun's Docker mirror to avoid Great Firewall issues.
+
 ```bash
-# Install Docker on Ubuntu 24.04
-# Add Docker's official GPG key
+# Install Docker on Ubuntu 24.04 using Aliyun mirror
 sudo apt update
 sudo apt install -y ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+# Use Aliyun's Docker repository mirror (works in China)
+curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-# Add Docker repository
+# Add Aliyun Docker repository
 echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.aliyun.com/docker-ce/linux/ubuntu \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
@@ -94,14 +97,39 @@ echo \
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Start Docker service (should be started automatically)
+# Start Docker service
 sudo systemctl start docker
 sudo systemctl enable docker
 
 # Verify installation
 docker --version
-sudo docker run hello-world
 ```
+
+### 2.1.1 Configure Docker Registry Mirror (Critical for China)
+
+Docker Hub is blocked by the Great Firewall. You MUST configure a registry mirror.
+
+**Get Your Personal Aliyun Accelerator:**
+1. Go to: https://cr.console.aliyun.com/cn-shanghai/instances/mirrors
+2. Copy your unique accelerator URL (looks like `https://[your-code].mirror.aliyuncs.com`)
+
+**Configure Docker:**
+```bash
+# Replace [your-code] with your actual accelerator code
+echo '{"registry-mirrors":["https://[your-code].mirror.aliyuncs.com"]}' | sudo tee /etc/docker/daemon.json
+
+# Restart Docker
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+
+# Verify configuration
+sudo docker info | grep -A 3 "Registry Mirrors"
+
+# Test with hello-world
+sudo docker pull hello-world
+```
+
+**If hello-world works, you're configured correctly!**
 
 ### 2.2 Clone Your Repository
 
@@ -110,14 +138,49 @@ sudo docker run hello-world
 cd ~
 
 # Clone your repository
-git clone https://github.com/yourusername/paperio2.git
-# Or use your Git repository URL
+git clone https://github.com/woofully/paperio.git
 
 # Enter project directory
-cd paperio2
+cd paperio
 ```
 
-### 2.3 Build Docker Image
+### 2.3 Pull Node.js Base Image (Workaround for GFW)
+
+**CRITICAL**: The Aliyun accelerator often doesn't have `node:18-alpine` cached. Use DaoCloud registry instead:
+
+```bash
+# Pull Node.js image from DaoCloud (works reliably in China)
+sudo docker pull docker.m.daocloud.io/library/node:18-alpine
+
+# Tag it so Dockerfile can find it
+sudo docker tag docker.m.daocloud.io/library/node:18-alpine node:18-alpine
+
+# Verify the image is available
+sudo docker images | grep node
+```
+
+### 2.3.1 Modify Dockerfile for Chinese npm Registry
+
+**IMPORTANT**: Add npm mirror configuration to avoid timeouts during build:
+
+```bash
+# Add npm mirror config to Dockerfile (after line 5)
+sed -i '6 i RUN npm config set registry https://registry.npmmirror.com' Dockerfile
+
+# Verify the change
+head -10 Dockerfile
+```
+
+You should see the new line added:
+```dockerfile
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+RUN npm config set registry https://registry.npmmirror.com  # <-- This line was added
+```
+
+### 2.4 Build Docker Image
 
 ```bash
 # Build the Docker image
@@ -859,7 +922,47 @@ The client will automatically use `wss://` (secure WebSocket) protocol.
 
 ## 9. Troubleshooting
 
-### 9.1 Cannot Access Game from Browser
+### 9.1 Docker Build Fails: "node:18-alpine: not found"
+
+**This is the #1 issue when deploying in China.** The Great Firewall blocks Docker Hub sync to Aliyun mirrors.
+
+**Solution 1: Use DaoCloud Registry** (Recommended):
+```bash
+# Pull from DaoCloud (works reliably in China)
+sudo docker pull docker.m.daocloud.io/library/node:18-alpine
+
+# Tag it for your Dockerfile
+sudo docker tag docker.m.daocloud.io/library/node:18-alpine node:18-alpine
+
+# Verify
+sudo docker images | grep node
+
+# Now build will work
+sudo docker build -t paperio2:latest .
+```
+
+**Solution 2: Alternative Registries**:
+```bash
+# Try these if DaoCloud fails
+sudo docker pull dockerproxy.cn/library/node:18-alpine
+sudo docker pull docker.1panel.live/library/node:18-alpine
+```
+
+**Solution 3: Get Your Personal Aliyun Accelerator**:
+1. Visit: https://cr.console.aliyun.com/cn-shanghai/instances/mirrors
+2. Copy your unique URL: `https://[your-code].mirror.aliyuncs.com`
+3. Configure:
+   ```bash
+   echo '{"registry-mirrors":["https://[your-code].mirror.aliyuncs.com"]}' | sudo tee /etc/docker/daemon.json
+   sudo systemctl daemon-reload && sudo systemctl restart docker
+   ```
+
+**Don't forget to add npm mirror to Dockerfile:**
+```bash
+sed -i '6 i RUN npm config set registry https://registry.npmmirror.com' Dockerfile
+```
+
+### 9.2 Cannot Access Game from Browser
 
 **Check if server is running:**
 ```bash
@@ -886,7 +989,7 @@ sudo ufw status
 - Verify port 80 is allowed in inbound rules
 - Source should be 0.0.0.0/0
 
-### 9.2 Game Loads but Can't Connect to Server
+### 9.3 Game Loads but Can't Connect to Server
 
 **Check WebSocket connection in browser console:**
 ```javascript

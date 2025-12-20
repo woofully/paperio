@@ -247,45 +247,45 @@
   <div id="intro-modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-banner">📢 广告位招租，联系Louis</div>
-      <div class="modal-title">Paper.io 2</div>
+      <div class="modal-title">圈地游戏</div>
       <input
         type="text"
         id="username-input"
         class="modal-input"
-        placeholder="Enter your username..."
+        placeholder="输入用户名"
         maxlength="15"
         autocomplete="off"
       />
-      <button id="play-button" class="modal-button">Play Game</button>
+      <button id="play-button" class="modal-button">开始游戏</button>
     </div>
   </div>
 
   <!-- Outro Modal -->
   <div id="outro-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <div class="modal-title">Game Over!</div>
+      <div class="modal-title">游戏结束！</div>
       <div class="modal-stats">
-        <div class="stat-label">Your Score</div>
+        <div class="stat-label">您的领地</div>
         <div class="stat-value" id="final-score">0.0%</div>
       </div>
-      <button id="play-again-button" class="modal-button">Play Again</button>
+      <button id="play-again-button" class="modal-button">再玩一盘</button>
     </div>
   </div>
 
   <div id="ui">
     <div id="score">0.0%</div>
-    <div id="status">Connecting...</div>
+    <div id="status">连接中...</div>
   </div>
 
   <div id="leaderboard">
-    <h3>LEADERBOARD</h3>
+    <h3>积分榜</h3>
     <div id="leaderboard-list"></div>
   </div>
 
   <canvas id="minimap" width="200" height="200"></canvas>
 
   <div id="instructions">
-    Move mouse to steer • Leave territory to capture area • Don't hit trails!
+    点击屏幕操控，不要撞到自己的行驶轨迹
   </div>
 
   <script type="module" src="/src/main.ts"></script>
